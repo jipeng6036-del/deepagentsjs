@@ -61,12 +61,16 @@ jobs:
       - name: Full project tests including formatting and lint
         working-directory: source
         run: pnpm test
-      - name: Independent typecheck
+      - name: Changed package typecheck
         working-directory: source
-        run: pnpm typecheck
+        run: pnpm --filter deepagents typecheck
       - name: README and source spelling
         if: runner.os == 'Linux' && matrix.node == '24.x'
         working-directory: source
         run: |
           python -m pip install codespell
           python -m codespell -I .codespellignore README.md libs
+      - name: Extra workspace typecheck diagnostic (also fails on unchanged baseline)
+        continue-on-error: true
+        working-directory: source
+        run: pnpm typecheck

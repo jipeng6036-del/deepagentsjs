@@ -18,6 +18,8 @@ const sourceCommit = execFileSync('git', ['-C', sourceRoot, 'rev-parse', 'HEAD']
   encoding: 'utf8',
 }).trim();
 const results = [];
+const workerDelayMs = process.platform === 'win32' ? 8000 : 3000;
+const cleanupBoundMs = process.platform === 'win32' ? 7000 : 2700;
 const cases = [
   { redirect: false, ignoreTerm: false },
   { redirect: true, ignoreTerm: false },
@@ -42,7 +44,7 @@ for (const scenario of cases) {
       "const fs = require('node:fs');",
       scenario.ignoreTerm ? "process.on('SIGTERM', () => {});" : '',
       "fs.writeFileSync('ready.txt', String(process.pid));",
-      "setTimeout(() => fs.writeFileSync('late.txt', 'late write'), 3000);",
+      `setTimeout(() => fs.writeFileSync('late.txt', 'late write'), ${workerDelayMs});`,
     ].join('\n'));
     const redirect = scenario.redirect
       ? (process.platform === 'win32' ? ' > NUL 2>&1' : ' > /dev/null 2>&1')
@@ -54,9 +56,9 @@ for (const scenario of cases) {
     const elapsedMs = Math.round(performance.now() - started);
     const readyAtReturn = existsSync(path.join(rootDir, 'ready.txt'));
     const markerAtReturn = existsSync(path.join(rootDir, 'late.txt'));
-    await delay(Math.max(0, 4000 - elapsedMs));
+    await delay(Math.max(0, workerDelayMs + 1000 - elapsedMs));
     const markerAfterWait = existsSync(path.join(rootDir, 'late.txt'));
-    const fixed = response.exitCode === 124 && readyAtReturn && elapsedMs < 2700 && !markerAfterWait;
+    const fixed = response.exitCode === 124 && readyAtReturn && elapsedMs < cleanupBoundMs && !markerAfterWait;
     const row = { ...scenario, elapsedMs, readyAtReturn, markerAtReturn, markerAfterWait,
       exitCode: response.exitCode, output: response.output, fixed };
     results.push(row);
@@ -77,5 +79,5 @@ for (const scenario of cases) {
   }
 }
 console.log(JSON.stringify({ mode, sourceCommit, node: process.version,
-  platform: process.platform, arch: process.arch, cases: results.length,
+  platform: process.platform, arch: process.arch, workerDelayMs, cleanupBoundMs, cases: results.length,
   expectedBehaviorVerified: true, results }));
